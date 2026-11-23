@@ -13,7 +13,7 @@ from telegram import Chat, InaccessibleMessage
 from telegram.error import TelegramError
 from telegram.ext import MessageHandler, filters
 
-from deutschcoach_phase0.bootstrap import create_application
+from deutschcoach_phase0.bootstrap import create_application, main
 from deutschcoach_phase0.bot import BotHandlers, _extract_audio_meta
 from deutschcoach_phase0.domain import (
     AdminNotification,
@@ -585,3 +585,41 @@ async def test_bootstrap_schedules_hourly_audio_cleanup_and_emits_no_warnings(
     callback = args[0]
     await callback(MagicMock())
     assert not stale.exists()
+
+
+def test_bootstrap_configures_telegram_timeouts_and_main_bootstrap_retries(
+    sample_settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    app = create_application(sample_settings)
+
+    regular_req = app.bot.request
+    assert regular_req.read_timeout == 30.0
+    assert regular_req._client.timeout == httpx.Timeout(
+        connect=15.0,
+        read=30.0,
+        write=30.0,
+        pool=10.0,
+    )
+    assert regular_req._media_write_timeout == 60.0
+
+    assert app.updater is not None
+    get_updates_req = app.updater.bot._request[0]
+    assert get_updates_req.read_timeout == 30.0
+    assert get_updates_req._client.timeout == httpx.Timeout(
+        connect=15.0,
+        read=30.0,
+        write=30.0,
+        pool=10.0,
+    )
+
+    fake_app = MagicMock()
+    fake_app.run_polling = MagicMock()
+    monkeypatch.setattr("deutschcoach_phase0.bootstrap.load_settings", lambda: sample_settings)
+    monkeypatch.setattr("deutschcoach_phase0.bootstrap.configure_logging", lambda *_a, **_kw: None)
+    monkeypatch.setattr("deutschcoach_phase0.bootstrap.create_application", lambda _s: fake_app)
+
+    main()
+    fake_app.run_polling.assert_called_once_with(
+        drop_pending_updates=False,
+        bootstrap_retries=-1,
+    )

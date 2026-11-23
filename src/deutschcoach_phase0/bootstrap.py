@@ -60,6 +60,15 @@ def create_application(settings: Settings) -> Application:
         Application.builder()
         .token(settings.telegram_bot_token)
         .concurrent_updates(32)
+        .connect_timeout(15.0)
+        .read_timeout(30.0)
+        .write_timeout(30.0)
+        .pool_timeout(10.0)
+        .media_write_timeout(60.0)
+        .get_updates_connect_timeout(15.0)
+        .get_updates_read_timeout(30.0)
+        .get_updates_write_timeout(30.0)
+        .get_updates_pool_timeout(10.0)
         .post_shutdown(_post_shutdown)
         .build()
     )
@@ -102,7 +111,7 @@ def main() -> None:
     configure_logging(settings.log_level, extra_secrets=settings.sensitive_values())
     app = create_application(settings)
     logger.info("Starting DeutschCoach Phase 0 Telegram validation bot")
-    app.run_polling(drop_pending_updates=False)
+    app.run_polling(drop_pending_updates=False, bootstrap_retries=-1)
 
 
 if __name__ == "__main__":
