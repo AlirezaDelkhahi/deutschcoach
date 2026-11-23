@@ -1,0 +1,42 @@
+services:
+  bot:
+    build: .
+    container_name: deutschcoach-phase0
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 30s
+    env_file:
+      - .env
+    environment:
+      DATA_DIR: /app/data
+      TMP_AUDIO_DIR: /app/tmp_audio
+    volumes:
+      - deutschcoach_data:/app/data
+    tmpfs:
+      - /app/tmp_audio:size=128m,mode=0700,uid=10001,gid=10001
+      - /tmp:size=32m,mode=1777
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import os, pathlib, shutil; assert shutil.which('ffprobe') and shutil.which('ffmpeg'); assert os.access('/app/data', os.W_OK); assert pathlib.Path('/app/data/deutschcoach_phase0.db').exists()",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  deutschcoach_data:

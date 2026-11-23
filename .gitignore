@@ -1,0 +1,10 @@
+.venv/
+.env
+data/
+tmp_audio/
+*.db*
+*.jsonl
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
