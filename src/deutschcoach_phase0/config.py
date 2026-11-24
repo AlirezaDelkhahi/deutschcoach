@@ -8,14 +8,16 @@ from pathlib import Path
 from deutschcoach_phase0.domain import ServiceConfig
 
 VALID_LOG_LEVELS: frozenset[str] = frozenset({"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"})
+VALID_THINKING_LEVELS: frozenset[str] = frozenset({"low", "medium", "high"})
 
 
 @dataclass(frozen=True)
 class Settings:
     telegram_bot_token: str
     gemini_api_key: str
-    gemini_model: str = "gemini-2.5-flash"
+    gemini_model: str = "gemini-3.8-flash"
     gemini_thinking_budget: int = 512
+    gemini_thinking_level: str = "low"
     gemini_timeout_sec: int = 60
     admin_user_ids: frozenset[int] = frozenset()
     admin_notify_chat_id: int | None = None
@@ -41,6 +43,12 @@ class Settings:
             raise ValueError("GEMINI_MODEL must not be empty")
 
         _require_non_negative_int(self.gemini_thinking_budget, "GEMINI_THINKING_BUDGET")
+        normalized_thinking_level = self.gemini_thinking_level.strip().lower()
+        if normalized_thinking_level not in VALID_THINKING_LEVELS:
+            raise ValueError(
+                f"GEMINI_THINKING_LEVEL must be one of {sorted(VALID_THINKING_LEVELS)}"
+            )
+        object.__setattr__(self, "gemini_thinking_level", normalized_thinking_level)
         _require_positive_int(self.gemini_timeout_sec, "GEMINI_TIMEOUT_SEC")
         _require_positive_int(self.usd_to_toman_rate, "USD_TO_TOMAN_RATE")
         _require_positive_int(self.beta_pack_price_toman, "BETA_PACK_PRICE_TOMAN")
@@ -172,8 +180,9 @@ def load_settings(
     return Settings(
         telegram_bot_token=get_str("TELEGRAM_BOT_TOKEN"),
         gemini_api_key=get_str("GEMINI_API_KEY"),
-        gemini_model=get_str("GEMINI_MODEL", "gemini-2.5-flash"),
+        gemini_model=get_str("GEMINI_MODEL", "gemini-3.8-flash"),
         gemini_thinking_budget=get_int("GEMINI_THINKING_BUDGET", 512),
+        gemini_thinking_level=get_str("GEMINI_THINKING_LEVEL", "low"),
         gemini_timeout_sec=get_int("GEMINI_TIMEOUT_SEC", 60),
         admin_user_ids=_parse_admin_user_ids(get_str("ADMIN_USER_IDS")),
         admin_notify_chat_id=admin_notify_chat_id,

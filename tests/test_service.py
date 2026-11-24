@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
@@ -505,12 +506,14 @@ class FakeEvaluator:
         delay_sec: float = 0.0,
         raise_transient: bool = False,
         potentially_billed_transient: bool = False,
+        transient_message: str = "Gemini timeout",
         audio_input_tokens: int = 1920,
     ) -> None:
         self.raw_text = raw_text
         self.delay_sec = delay_sec
         self.raise_transient = raise_transient
         self.potentially_billed_transient = potentially_billed_transient
+        self.transient_message = transient_message
         self.audio_input_tokens = audio_input_tokens
         self.calls: int = 0
         self.seen_bytes: list[bytes] = []
@@ -531,7 +534,7 @@ class FakeEvaluator:
             await asyncio.sleep(self.delay_sec)
         if self.raise_transient:
             raise TransientEvaluatorError(
-                "Gemini timeout",
+                self.transient_message,
                 potentially_billed=self.potentially_billed_transient,
             )
         return EvaluatorOutput(
@@ -966,3 +969,42 @@ async def test_service_duplicate_tx_ref_admin_approve_returns_warning(sample_set
     assert repo.get_user(417).payment_verified is False
     assert "دیگری" in dup_res.messages[0].text
     assert dup_res.outbound_messages == ()
+
+
+@pytest.mark.asyncio
+async def test_service_transient_evaluator_error_logs_redacted_warning(
+    sample_settings, caplog: pytest.LogCaptureFixture
+) -> None:
+    leaking_eval = FakeEvaluator(
+        raise_transient=True,
+        potentially_billed_transient=True,
+        transient_message=(
+            f"503 upstream failed key={sample_settings.gemini_api_key} "
+            f"bot={sample_settings.telegram_bot_token} card={sample_settings.card_to_card_number}"
+        ),
+    )
+    svc, _, _, _, _, _ = _build_service(sample_settings, evaluator=leaking_eval)
+    await svc.handle_start(418, None, "WarnUser", None)
+    await svc.handle_level_selected(418, "B1")
+    await svc.handle_timeline_selected(418, "<1 month")
+
+    with caplog.at_level(logging.WARNING, logger="deutschcoach_phase0.service"):
+        await svc.handle_voice(
+            418,
+            IncomingAudioMeta("f-warn", "u-warn", "audio/ogg", 100_000, 50.0),
+        )
+
+    warn_records = [
+        r
+        for r in caplog.records
+        if r.name == "deutschcoach_phase0.service" and r.levelno == logging.WARNING
+    ]
+    assert len(warn_records) == 1
+    msg = warn_records[0].getMessage()
+    assert "418" in msg
+    assert "potentially_billed=True" in msg
+    assert "503 upstream failed" in msg
+    assert "[REDACTED]" in msg
+    for secret in sample_settings.sensitive_values():
+        assert secret not in msg
+    assert sample_settings.telegram_bot_token.split(":", 1)[1] not in msg

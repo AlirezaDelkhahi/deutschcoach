@@ -104,20 +104,28 @@ def _is_potentially_billed(exc: BaseException) -> bool:
 
 
 class GeminiSpeechEvaluator:
-    """Async Gemini 2.5 Flash native audio evaluator using google-genai SDK."""
+    """Async Gemini native audio evaluator using google-genai SDK."""
 
     def __init__(
         self,
         api_key: str,
         model: str,
         thinking_budget: int = 512,
+        thinking_level: str = "low",
         extra_secrets: Iterable[str] = (),
         client: genai.Client | None = None,
     ) -> None:
         self._model = model
         self._thinking_budget = thinking_budget
+        self._thinking_level = thinking_level.strip().lower()
         self._extra_secrets = tuple(s for s in extra_secrets if s)
         self._client = client if client is not None else genai.Client(api_key=api_key)
+
+    def _build_thinking_config(self) -> types.ThinkingConfig:
+        normalized_model = self._model.strip().lower().removeprefix("models/")
+        if normalized_model.startswith("gemini-3"):
+            return types.ThinkingConfig(thinking_level=self._thinking_level)
+        return types.ThinkingConfig(thinking_budget=self._thinking_budget)
 
     async def evaluate_audio(
         self,
@@ -132,7 +140,7 @@ class GeminiSpeechEvaluator:
             system_instruction=system_prompt,
             response_mime_type="application/json",
             temperature=0.2,
-            thinking_config=types.ThinkingConfig(thinking_budget=self._thinking_budget),
+            thinking_config=self._build_thinking_config(),
         )
 
         try:

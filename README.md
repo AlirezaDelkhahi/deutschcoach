@@ -8,7 +8,7 @@
    - Atomic `1` free evaluation per `telegram_user_id` (`AVAILABLE → RESERVED → CONSUMED`) with admin QA whitelist repeatability (`ADMIN_USER_IDS`), plus capping potentially billed failed/timed-out evaluations (`MAX_BILLED_FAILED_ATTEMPTS=2`) so attackers cannot loop Gemini retries.
    - Telegram `VOICE`-only evaluation (rejects non-voice audio/document uploads) with pre-download size (`≤ 5 MB`), MIME, and duration (`15s ≤ d ≤ 125s`) checks.
    - Strict `ffprobe` validation (`-protocol_whitelist file` / `-format_whitelist` + video-stream rejection) and decoded `ffmpeg` Opus normalization (capped at `-t 126`, verified `15s ≤ d ≤ 125s`) before calling Gemini, plus immediate temp-file cleanup.
-3. **Gemini 2.5 Flash Native Audio Evaluation:** Evaluates `.ogg` voice note with strict JSON parsing, exact `Decimal` USD / integer `Toman` cost tracking (`1 USD = 273,000 Toman`), and quota release on transient API errors or unparseable responses.
+3. **Gemini 3.8 Flash Native Audio Evaluation:** Evaluates `.ogg` voice note using `gemini-3.8-flash` (configurable back to `2.5` if needed) with strict JSON parsing, exact `Decimal` USD / integer `Toman` cost tracking (`1 USD = 273,000 Toman`), and quota release on transient API errors or unparseable responses.
 4. **Founder-Beta Pre-Order Funnel:** Immediate `490,000 Toman` (vs `790,000 Toman`) offer with Shaparak VPN-off warning, manual receipt submission, admin `/approve <telegram_user_id> <tx_ref>`, `/stats`, and Hour-36 `/followup`.
 
 ---
@@ -117,7 +117,7 @@ WantedBy=multi-user.target
 
 ## Environment Variables Reference
 
-All 19 environment variables parsed in `src/deutschcoach_phase0/config.py`:
+All 20 environment variables parsed in `src/deutschcoach_phase0/config.py`:
 
 | Variable | Required | Default | Description |
 | :--- | :--- | :--- | :--- |
@@ -129,8 +129,9 @@ All 19 environment variables parsed in `src/deutschcoach_phase0/config.py`:
 | `CARD_TO_CARD_NUMBER` | No | `""` | Optional Card-to-Card fallback number (automatically redacted from logs/telemetry) |
 | `CARD_TO_CARD_HOLDER` | No | `""` | Optional Card-to-Card recipient holder name |
 | `FOUNDER_SUPPORT_HANDLE` | No | `""` | Optional Telegram support handle (e.g., `@handle`) for payment help |
-| `GEMINI_MODEL` | No | `gemini-2.5-flash` | Gemini model ID used for native audio evaluation |
-| `GEMINI_THINKING_BUDGET` | No | `512` | Non-negative integer thinking token budget passed to Gemini |
+| `GEMINI_MODEL` | No | `gemini-3.8-flash` | Gemini model ID used for native audio evaluation (`gemini-2.5-flash` also supported) |
+| `GEMINI_THINKING_LEVEL` | No | `low` | Thinking depth for Gemini 3.x models: `low`, `medium`, or `high` |
+| `GEMINI_THINKING_BUDGET` | No | `512` | Non-negative integer thinking token budget passed to Gemini 2.5 models |
 | `GEMINI_TIMEOUT_SEC` | No | `60` | Positive integer timeout in seconds for Gemini evaluation calls |
 | `USD_TO_TOMAN_RATE` | No | `273000` | Positive integer FX rate used to convert USD API cost into Toman |
 | `BETA_PACK_PRICE_TOMAN` | No | `490000` | Positive integer Founder-Beta 10-mock pack price in Toman |

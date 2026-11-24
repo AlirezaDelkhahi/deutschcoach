@@ -8,11 +8,24 @@ from deutschcoach_phase0.domain import CostBreakdown, EvaluatorOutput
 AUDIO_INPUT_USD_PER_1M = Decimal("1.00")
 TEXT_INPUT_USD_PER_1M = Decimal("0.30")
 OUTPUT_USD_PER_1M = Decimal("2.50")
+GEMINI_3_8_FLASH_INPUT_USD_PER_1M = Decimal("0.75")
+GEMINI_3_8_FLASH_OUTPUT_USD_PER_1M = Decimal("3.75")
 
 _ONE_MILLION = Decimal("1000000")
 _USD_QUANTUM = Decimal("0.000001")
 _TOMAN_QUANTUM = Decimal("1")
 _AUDIO_TOKENS_PER_SEC = 32
+
+
+def _resolve_model_rates(model_name: str) -> tuple[Decimal, Decimal, Decimal]:
+    normalized = model_name.strip().lower().removeprefix("models/")
+    if normalized.startswith("gemini-3.8-flash"):
+        return (
+            GEMINI_3_8_FLASH_INPUT_USD_PER_1M,
+            GEMINI_3_8_FLASH_INPUT_USD_PER_1M,
+            GEMINI_3_8_FLASH_OUTPUT_USD_PER_1M,
+        )
+    return AUDIO_INPUT_USD_PER_1M, TEXT_INPUT_USD_PER_1M, OUTPUT_USD_PER_1M
 
 
 def calculate_gemini_cost(
@@ -32,11 +45,12 @@ def calculate_gemini_cost(
 
     output_tokens = max(0, output.candidates_tokens) + max(0, output.thoughts_tokens)
     total_input_tokens = audio_in + text_in
+    audio_rate, text_rate, output_rate = _resolve_model_rates(output.model_name)
 
     raw_usd = (
-        (Decimal(audio_in) * AUDIO_INPUT_USD_PER_1M)
-        + (Decimal(text_in) * TEXT_INPUT_USD_PER_1M)
-        + (Decimal(output_tokens) * OUTPUT_USD_PER_1M)
+        (Decimal(audio_in) * audio_rate)
+        + (Decimal(text_in) * text_rate)
+        + (Decimal(output_tokens) * output_rate)
     ) / _ONE_MILLION
 
     estimated_cost_usd = raw_usd.quantize(_USD_QUANTUM, rounding=ROUND_HALF_UP)

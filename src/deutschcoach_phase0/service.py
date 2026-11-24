@@ -403,6 +403,12 @@ class DiagnosticService:
                     timeout_sec=self._config.gemini_timeout_sec,
                 )
             except TransientEvaluatorError as exc:
+                logger.warning(
+                    "Gemini evaluation transient failure for user %s (potentially_billed=%s): %s",
+                    telegram_user_id,
+                    exc.potentially_billed,
+                    redact_sensitive_text(str(exc), self._config.sensitive_values),
+                )
                 err_now = self._now_iso()
                 billed_cost: CostBreakdown | None = None
                 if exc.potentially_billed:

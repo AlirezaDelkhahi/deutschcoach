@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import warnings
+from dataclasses import replace
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -643,3 +644,92 @@ async def test_bootstrap_configures_telegram_timeouts_and_main_bootstrap_retries
         drop_pending_updates=False,
         bootstrap_retries=-1,
     )
+
+
+@pytest.mark.asyncio
+async def test_gemini_evaluator_configures_thinking_level_for_3x_and_budget_for_25(
+    sample_settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake_response = SimpleNamespace(
+        text='{"total_score": 70}',
+        usage_metadata=SimpleNamespace(
+            prompt_token_count=100,
+            candidates_token_count=50,
+            thoughts_token_count=10,
+            prompt_tokens_details=[],
+        ),
+    )
+
+    fake_client_3x = MagicMock()
+    fake_client_3x.aio.models.generate_content = AsyncMock(return_value=fake_response)
+    fake_client_3x.aio.aclose = AsyncMock()
+    eval_3x = GeminiSpeechEvaluator(
+        api_key=sample_settings.gemini_api_key,
+        model="gemini-3.8-flash",
+        thinking_budget=512,
+        thinking_level="high",
+        extra_secrets=sample_settings.sensitive_values(),
+        client=fake_client_3x,
+    )
+    out_3x = await eval_3x.evaluate_audio(b"ogg", "audio/ogg", "SYS", "USR", 30)
+    assert out_3x.model_name == "gemini-3.8-flash"
+    cfg_3x = fake_client_3x.aio.models.generate_content.await_args.kwargs["config"]
+    assert cfg_3x.thinking_config.thinking_level == genai_types.ThinkingLevel.HIGH
+    assert cfg_3x.thinking_config.thinking_budget is None
+    await eval_3x.aclose()
+
+    fake_client_prefixed = MagicMock()
+    fake_client_prefixed.aio.models.generate_content = AsyncMock(return_value=fake_response)
+    fake_client_prefixed.aio.aclose = AsyncMock()
+    eval_prefixed = GeminiSpeechEvaluator(
+        api_key=sample_settings.gemini_api_key,
+        model="models/gemini-3.8-flash",
+        thinking_budget=512,
+        thinking_level="low",
+        client=fake_client_prefixed,
+    )
+    await eval_prefixed.evaluate_audio(b"ogg", "audio/ogg", "SYS", "USR", 30)
+    cfg_prefixed = fake_client_prefixed.aio.models.generate_content.await_args.kwargs["config"]
+    assert cfg_prefixed.thinking_config.thinking_level == genai_types.ThinkingLevel.LOW
+    assert cfg_prefixed.thinking_config.thinking_budget is None
+    await eval_prefixed.aclose()
+
+    fake_client_25 = MagicMock()
+    fake_client_25.aio.models.generate_content = AsyncMock(return_value=fake_response)
+    fake_client_25.aio.aclose = AsyncMock()
+    eval_25 = GeminiSpeechEvaluator(
+        api_key=sample_settings.gemini_api_key,
+        model="gemini-2.5-flash",
+        thinking_budget=512,
+        thinking_level="low",
+        client=fake_client_25,
+    )
+    await eval_25.evaluate_audio(b"ogg", "audio/ogg", "SYS", "USR", 30)
+    cfg_25 = fake_client_25.aio.models.generate_content.await_args.kwargs["config"]
+    assert cfg_25.thinking_config.thinking_budget == 512
+    assert cfg_25.thinking_config.thinking_level is None
+    await eval_25.aclose()
+
+    # bootstrap.create_application wires gemini_thinking_level into GeminiSpeechEvaluator
+    captured_kwargs: dict[str, object] = {}
+
+    class SpyEvaluator:
+        def __init__(self, **kwargs: object) -> None:
+            captured_kwargs.update(kwargs)
+
+        async def evaluate_audio(self, *_a: object, **_kw: object) -> object:
+            raise AssertionError("not called")
+
+        async def aclose(self) -> None:
+            return None
+
+    monkeypatch.setattr("deutschcoach_phase0.bootstrap.GeminiSpeechEvaluator", SpyEvaluator)
+
+    settings_3x = replace(
+        sample_settings,
+        gemini_model="gemini-3.8-flash",
+        gemini_thinking_level="medium",
+    )
+    create_application(settings_3x)
+    assert captured_kwargs["model"] == "gemini-3.8-flash"
+    assert captured_kwargs["thinking_level"] == "medium"

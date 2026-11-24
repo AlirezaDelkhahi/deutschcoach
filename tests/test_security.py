@@ -221,3 +221,37 @@ def test_load_settings_rejects_reservation_ttl_not_greater_than_gemini_timeout()
     )
     assert valid.reservation_ttl_sec == 105
     assert valid.max_billed_failed_attempts == 2
+
+
+def test_load_settings_defaults_to_gemini_38_flash_and_validates_thinking_level() -> None:
+    defaults = load_settings(
+        environ={
+            "TELEGRAM_BOT_TOKEN": "123:abc",
+            "GEMINI_API_KEY": "AIza123",
+        },
+        env_file=None,
+    )
+    assert defaults.gemini_model == "gemini-3.8-flash"
+    assert defaults.gemini_thinking_level == "low"
+
+    for raw_level, expected in (("low", "low"), ("MEDIUM", "medium"), (" High ", "high")):
+        parsed = load_settings(
+            environ={
+                "TELEGRAM_BOT_TOKEN": "123:abc",
+                "GEMINI_API_KEY": "AIza123",
+                "GEMINI_THINKING_LEVEL": raw_level,
+            },
+            env_file=None,
+        )
+        assert parsed.gemini_thinking_level == expected
+
+    for bad_level in ("minimal", "MINIMAL", "xhigh", "", "invalid"):
+        with pytest.raises(ValueError, match="GEMINI_THINKING_LEVEL"):
+            load_settings(
+                environ={
+                    "TELEGRAM_BOT_TOKEN": "123:abc",
+                    "GEMINI_API_KEY": "AIza123",
+                    "GEMINI_THINKING_LEVEL": bad_level,
+                },
+                env_file=None,
+            )

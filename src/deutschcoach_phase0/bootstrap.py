@@ -53,6 +53,7 @@ def create_application(settings: Settings) -> Application:
         api_key=settings.gemini_api_key,
         model=settings.gemini_model,
         thinking_budget=settings.gemini_thinking_budget,
+        thinking_level=settings.gemini_thinking_level,
         extra_secrets=settings.sensitive_values(),
     )
 
