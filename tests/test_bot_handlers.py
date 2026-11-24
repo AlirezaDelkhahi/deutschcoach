@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import warnings
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
@@ -9,7 +10,7 @@ import httpx
 import pytest
 from google.genai import errors as genai_errors
 from google.genai import types as genai_types
-from telegram import Chat, InaccessibleMessage
+from telegram import Chat, InaccessibleMessage, User
 from telegram.error import TelegramError
 from telegram.ext import MessageHandler, filters
 
@@ -587,16 +588,17 @@ async def test_bootstrap_schedules_hourly_audio_cleanup_and_emits_no_warnings(
     assert not stale.exists()
 
 
-def test_bootstrap_configures_telegram_timeouts_and_main_bootstrap_retries(
-    sample_settings, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.asyncio
+async def test_bootstrap_configures_telegram_timeouts_and_main_bootstrap_retries(
+    sample_settings, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
     app = create_application(sample_settings)
 
     regular_req = app.bot.request
-    assert regular_req.read_timeout == 30.0
+    assert regular_req.read_timeout == 65.0
     assert regular_req._client.timeout == httpx.Timeout(
         connect=15.0,
-        read=30.0,
+        read=65.0,
         write=30.0,
         pool=10.0,
     )
@@ -604,13 +606,31 @@ def test_bootstrap_configures_telegram_timeouts_and_main_bootstrap_retries(
 
     assert app.updater is not None
     get_updates_req = app.updater.bot._request[0]
-    assert get_updates_req.read_timeout == 30.0
+    assert get_updates_req.read_timeout == 65.0
     assert get_updates_req._client.timeout == httpx.Timeout(
         connect=15.0,
-        read=30.0,
+        read=65.0,
         write=30.0,
         pool=10.0,
     )
+
+    assert app.post_init is not None
+    app.bot._bot_user = User(
+        id=987654321,
+        first_name="DeutschCoach",
+        is_bot=True,
+        username="deutschcoach_bot",
+    )
+    with caplog.at_level(logging.INFO, logger="deutschcoach_phase0.bootstrap"):
+        await app.post_init(app)
+    expected_log = "Connected to Telegram as @deutschcoach_bot (id=987654321); polling started"
+    assert any(
+        record.levelno == logging.INFO and record.getMessage() == expected_log
+        for record in caplog.records
+    )
+    for secret in sample_settings.sensitive_values():
+        assert secret not in caplog.text
+    assert sample_settings.telegram_bot_token.split(":", 1)[1] not in caplog.text
 
     fake_app = MagicMock()
     fake_app.run_polling = MagicMock()

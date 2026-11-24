@@ -7,7 +7,10 @@ from datetime import UTC, datetime
 from telegram.ext import Application, ContextTypes
 from telegram.warnings import PTBUserWarning
 
-from deutschcoach_phase0.audio_guard import FfprobeAudioInspector, FilesystemAudioCleaner
+from deutschcoach_phase0.audio_guard import (
+    FfprobeAudioInspector,
+    FilesystemAudioCleaner,
+)
 from deutschcoach_phase0.bot import BotHandlers, TelegramAudioFetcher, register_handlers
 from deutschcoach_phase0.config import Settings, load_settings
 from deutschcoach_phase0.gemini_evaluator import GeminiSpeechEvaluator
@@ -53,6 +56,13 @@ def create_application(settings: Settings) -> Application:
         extra_secrets=settings.sensitive_values(),
     )
 
+    async def _post_init(application: Application) -> None:
+        logger.info(
+            "Connected to Telegram as @%s (id=%s); polling started",
+            application.bot.username,
+            application.bot.id,
+        )
+
     async def _post_shutdown(_app: Application) -> None:
         await evaluator.aclose()
 
@@ -61,14 +71,15 @@ def create_application(settings: Settings) -> Application:
         .token(settings.telegram_bot_token)
         .concurrent_updates(32)
         .connect_timeout(15.0)
-        .read_timeout(30.0)
+        .read_timeout(65.0)
         .write_timeout(30.0)
         .pool_timeout(10.0)
         .media_write_timeout(60.0)
         .get_updates_connect_timeout(15.0)
-        .get_updates_read_timeout(30.0)
+        .get_updates_read_timeout(65.0)
         .get_updates_write_timeout(30.0)
         .get_updates_pool_timeout(10.0)
+        .post_init(_post_init)
         .post_shutdown(_post_shutdown)
         .build()
     )
